@@ -7,19 +7,135 @@ output:
 
 
 ## Loading and preprocessing the data
+First, we'll load the data.
 
+I'm going to use the ReadR package to unzip the file, so I'll load that package.  I'll also load the tidyverse package at the same time.
+```{r, message=FALSE}
+require(readr)
+require(tidyverse)
+require(xtable)
+```
+
+```{r}
+rm(list = ls())
+```
+
+
+Next, I"ll load the data.
+
+```{r}
+df <- read_csv("activity.zip")
+head(df)
+str(df)
+```
+The assignment specified that NA's could be ignored, but I wanted to look at how many there are.
 
 
 ## What is mean total number of steps taken per day?
 
+```{r}
+daily_total_steps <- df %>% 
+  group_by(date) %>% 
+  summarize(total = sum(steps, na.rm = TRUE)) 
+daily_total_steps
+```
 
+```{r}
+hist(daily_total_steps$total, breaks = 10, main = "Histogram of Daily Total Steps", xlab = "Steps")
+rug(daily_total_steps$total)
+```
+
+```{r}
+summary(daily_total_steps)
+```
 
 ## What is the average daily activity pattern?
 
+```{r}
+intervals_df <- df %>% 
+  group_by(interval) %>% 
+  summarise(meansteps = mean(steps, na.rm = TRUE))
 
+with(intervals_df, plot(x = interval, y = meansteps, type = "l",
+                        xlab = "Interval during Day", 
+                        ylab = "Average Steps in Interval",
+                        main = "Average Daily Activity Pattern"))
+
+```
+
+```{r}
+intervals_df %>% filter(meansteps == max(meansteps))
+```
 
 ## Imputing missing values
 
 
+```{r}
+#creates a column to check for NA's in any of the columns
+df.na <- df %>% 
+  mutate(na_col = steps + date + interval)
+
+sum(is.na(df.na$na_col))
+
+#sums NAs in the steps column
+sum(is.na(df$steps))
+```
+
+**We'll use the mean value for the interval across all days to fill in missing values.**  We've already calcualted this in the "intervals_df" dataframe.
+
+```{r}
+df.na <- merge(x = df, y = intervals_df, by = "interval", ) 
+
+df.na[is.na(df.na$steps), "steps"] <- df.na[is.na(df.na$steps), "meansteps"]
+
+head(df.na)
+
+```
+
+```{r}
+daily_na_total_steps <- df.na %>% 
+  group_by(date) %>% 
+  summarize(total = sum(steps, na.rm = TRUE)) 
+daily_total_steps
+
+par(mfrow = c(1,2), mar = c(5, 4, 2, 1))
+hist(daily_total_steps$total, breaks = 10, main = "Daily Total Steps", xlab = "Steps", ylim = c(0, 25))
+rug(daily_total_steps$total)
+hist(daily_na_total_steps$total, breaks = 10, main = "Daily Total Steps, Imputed NAs", xlab = "Steps", ylim = c(0, 25))
+rug(daily_total_steps$total)
+```
+
+```{r}
+summary(daily_total_steps$total)
+summary(daily_na_total_steps$total)
+
+#Change in Median
+(10766-10395) / 10395
+#Change in Mean
+(10766-9354) / 9354
+```
+
+Imputing the NA values has a relatively small impact on the median (increases it by 3.6%), but a substantial effect on median, increasing it by 15%.
 
 ## Are there differences in activity patterns between weekdays and weekends?
+
+
+```{r}
+weekend_days <- c("Saturday", "Sunday")
+
+df.na$weekend <- factor((weekdays(df.na$date) %in% weekend_days), levels = c(FALSE, TRUE), labels = c("weekday", "weekend"))
+
+table(df.na$weekend)
+```
+
+```{r}
+library(lattice)
+```
+
+```{r}
+dayofweek_df <- df.na %>% 
+  group_by(interval, weekend) %>% 
+  summarise(total = mean(steps))
+with(dayofweek_df,  xyplot(total ~ interval | weekend, layout = c(1, 2), type = "l"))
+```
+
